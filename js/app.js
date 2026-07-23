@@ -316,8 +316,12 @@
   });
 
   /* ---------- visit stats ---------- */
+  // 浏览量只增不减：固定首页地址 + 固定计数器 + 本地最高值兜底
+  const CANONICAL_URL = "https://yl2883.github.io/-growth-book/";
   const COUNTER_NS = "growthbookyl2883";
-  const UV_KEY = "growth-book-uv-counted";
+  const UV_FLAG = "growth-book-uv-flag";
+  const MAX_PV_KEY = "growth-book-max-pv";
+  const MAX_UV_KEY = "growth-book-max-uv";
 
   function setVisitNumbers(pv, uv) {
     const pvEl = document.getElementById("busuanzi_value_site_pv");
@@ -332,21 +336,22 @@
     if (sideUv && uv != null) sideUv.textContent = String(uv);
   }
 
-  async function countWithVercount() {
-    const isNewUv = !localStorage.getItem(UV_KEY);
-    const res = await fetch("https://events.vercount.one/api/v2/log", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ url: location.href, isNewUv }),
-      cache: "no-store",
-    });
-    if (!res.ok) throw new Error("vercount http " + res.status);
-    const data = await res.json();
-    const pv = data?.data?.site_pv ?? data?.site_pv;
-    const uv = data?.data?.site_uv ?? data?.site_uv;
-    if (pv == null || uv == null) throw new Error("vercount empty");
-    if (isNewUv) localStorage.setItem(UV_KEY, "1");
-    return { pv, uv };
+  function getStoredMax() {
+    return {
+      pv: Number(localStorage.getItem(MAX_PV_KEY) || 0),
+      uv: Number(localStorage.getItem(MAX_UV_KEY) || 0),
+    };
+  }
+
+  function commitCounts(pv, uv) {
+    const stored = getStoredMax();
+    const nextPv = Math.max(stored.pv, Number(pv) || 0);
+    const nextUv = Math.max(stored.uv, Number(uv) || 0);
+    if (nextPv > 0) localStorage.setItem(MAX_PV_KEY, String(nextPv));
+    if (nextUv > 0) localStorage.setItem(MAX_UV_KEY, String(nextUv));
+    if (nextPv > 0 || nextUv > 0) {
+      setVisitNumbers(nextPv, nextUv);
+    }
   }
 
   async function countWithCounterApi() {
@@ -355,44 +360,78 @@
     });
     if (!pvRes.ok) throw new Error("counterapi pv failed");
     const pvData = await pvRes.json();
-    const pv = pvData.count ?? pvData.value;
+    const pv = Number(pvData.count ?? pvData.value);
 
     let uv;
-    if (!localStorage.getItem(UV_KEY)) {
+    if (!localStorage.getItem(UV_FLAG)) {
       const uvRes = await fetch(`https://api.counterapi.dev/v1/${COUNTER_NS}/site_uv/up`, {
         cache: "no-store",
       });
+      if (!uvRes.ok) throw new Error("counterapi uv failed");
       const uvData = await uvRes.json();
-      uv = uvData.count ?? uvData.value;
-      localStorage.setItem(UV_KEY, "1");
+      uv = Number(uvData.count ?? uvData.value);
+      localStorage.setItem(UV_FLAG, "1");
     } else {
       const uvRes = await fetch(`https://api.counterapi.dev/v1/${COUNTER_NS}/site_uv/`, {
         cache: "no-store",
       });
+      if (!uvRes.ok) throw new Error("counterapi uv get failed");
       const uvData = await uvRes.json();
-      uv = uvData.count ?? uvData.value;
+      uv = Number(uvData.count ?? uvData.value);
     }
+    if (!Number.isFinite(pv) || pv < 0) throw new Error("invalid pv");
+    if (!Number.isFinite(uv) || uv < 0) throw new Error("invalid uv");
+    return { pv, uv };
+  }
+
+  async function countWithVercount() {
+    const isNewUv = !localStorage.getItem(UV_FLAG);
+    const res = await fetch("https://events.vercount.one/api/v2/log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      // 固定首页，避免 ?参数 / #章节 被当成新页面从 0 计
+      body: JSON.stringify({ url: CANONICAL_URL, isNewUv }),
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error("vercount http " + res.status);
+    const data = await res.json();
+    const pv = Number(data?.data?.site_pv ?? data?.site_pv);
+    const uv = Number(data?.data?.site_uv ?? data?.site_uv);
+    if (!Number.isFinite(pv) || !Number.isFinite(uv)) throw new Error("vercount empty");
+    if (pv <= 0 && uv <= 0) throw new Error("vercount zero");
+    if (isNewUv) localStorage.setItem(UV_FLAG, "1");
     return { pv, uv };
   }
 
   async function loadVisitStats() {
-    // 只在线上域名统计，避免本地预览干扰
     const host = location.hostname;
     if (host === "localhost" || host === "127.0.0.1") {
       setVisitNumbers("本地", "本地");
       return;
     }
+
+    // 先显示本地最高值，避免一打开像从 0 开始
+    const stored = getStoredMax();
+    if (stored.pv > 0 || stored.uv > 0) {
+      setVisitNumbers(stored.pv || "…", stored.uv || "…");
+    }
+
     try {
       let result;
       try {
-        result = await countWithVercount();
-      } catch (e1) {
         result = await countWithCounterApi();
+      } catch (e1) {
+        result = await countWithVercount();
       }
-      setVisitNumbers(result.pv, result.uv);
+      commitCounts(result.pv, result.uv);
     } catch (err) {
       console.warn("visit stats failed", err);
-      setVisitNumbers("—", "—");
+      const fallback = getStoredMax();
+      if (fallback.pv > 0 || fallback.uv > 0) {
+        setVisitNumbers(fallback.pv || "—", fallback.uv || "—");
+      } else {
+        setVisitNumbers("—", "—");
+      }
     }
   }
 
