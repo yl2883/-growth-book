@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="《借你十年成长文字的光》在线电子书">
+  <meta name="theme-color" content="#FFF8EE">
+  <title>借你十年成长文字的光</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <div class="progress" id="progress" aria-hidden="true"></div>
+
+  <!-- Cover -->
+  <section class="cover" id="cover" aria-label="封面">
+    <div class="cover-bg" aria-hidden="true"></div>
+    <div class="cover-inner" id="coverInner">
+      <figure class="cover-book">
+        <img src="images/cover.jpg" alt="《借你十年成长文字的光》封面" width="890" height="1280">
+      </figure>
+      <div class="cover-meta">
+        <p class="cover-author" id="coverAuthor">天风 编著</p>
+        <div class="cover-actions">
+          <button type="button" class="btn primary" id="startRead">开始阅读</button>
+          <button type="button" class="btn ghost" id="openTocFromCover">目录</button>
+        </div>
+        <p class="resume" id="resumeHint" hidden></p>
+      </div>
+    </div>
+    <div class="quote-stage" id="quoteStage" aria-hidden="true">
+      <p class="quote" id="quoteText">
+        <span>愿你历经岁月，</span>
+        <span>依旧向阳生长。</span>
+      </p>
+      <button type="button" class="btn soft" id="enterBook">进入正文</button>
+    </div>
+    <div class="scroll-hint" id="scrollHint" aria-hidden="true">
+      <span class="scroll-line"></span>
+      <span>向下</span>
+    </div>
+  </section>
+
+  <!-- Reader -->
+  <div class="reader" id="reader" hidden>
+    <aside class="sidebar" id="sidebar" aria-label="目录">
+      <div class="sidebar-head">
+        <div class="brand">
+          <strong>借你十年成长</strong>
+          <span>文字的光</span>
+        </div>
+        <button type="button" class="icon-btn close-sidebar" id="closeSidebar" aria-label="关闭目录">✕</button>
+      </div>
+      <label class="search-wrap">
+        <span class="sr-only">搜索</span>
+        <input type="search" id="searchInput" class="search" placeholder="搜索目录与正文" autocomplete="off">
+      </label>
+      <nav class="toc" id="toc"></nav>
+    </aside>
+    <div class="backdrop" id="backdrop" hidden></div>
+
+    <main class="main">
+      <header class="topbar">
+        <button type="button" class="icon-btn" id="menuBtn" aria-label="打开目录">☰</button>
+        <div class="topbar-title">
+          <small id="partLabel">卷首</small>
+          <strong id="pageLabel">自序</strong>
+        </div>
+        <div class="topbar-actions">
+          <button type="button" class="icon-btn" id="fontDown" aria-label="减小字体">A−</button>
+          <button type="button" class="icon-btn" id="fontUp" aria-label="增大字体">A+</button>
+          <button type="button" class="icon-btn" id="themeBtn" aria-label="夜间模式">☾</button>
+          <button type="button" class="text-btn" id="backCover">封面</button>
+        </div>
+      </header>
+
+      <article class="page" id="page">
+        <div class="page-inner" id="pageContent"></div>
+      </article>
+
+      <nav class="pager" aria-label="篇章切换">
+        <button type="button" class="pager-btn" id="prevBtn">
+          <span>上一篇</span>
+          <strong id="prevTitle"></strong>
+        </button>
+        <button type="button" class="pager-btn toc-jump" id="tocJump">返回目录</button>
+        <button type="button" class="pager-btn next" id="nextBtn">
+          <span>下一篇</span>
+          <strong id="nextTitle"></strong>
+        </button>
+      </nav>
+    </main>
+  </div>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/book-data.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
