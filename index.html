@@ -24,6 +24,15 @@
           <button type="button" class="btn primary" id="startRead">开始阅读</button>
           <button type="button" class="btn ghost" id="openTocFromCover">目录</button>
         </div>
+        <p class="visit-stats" id="visitStats" hidden>
+          <span id="busuanzi_container_site_pv">
+            阅读 <span id="busuanzi_value_site_pv"></span> 次
+          </span>
+          <span class="visit-dot" aria-hidden="true">·</span>
+          <span id="busuanzi_container_site_uv">
+            访客 <span id="busuanzi_value_site_uv"></span> 人
+          </span>
+        </p>
         <p class="resume" id="resumeHint" hidden></p>
       </div>
     </div>
@@ -55,6 +64,10 @@
         <input type="search" id="searchInput" class="search" placeholder="搜索目录与正文" autocomplete="off">
       </label>
       <nav class="toc" id="toc"></nav>
+      <p class="sidebar-stats" id="sidebarStats" hidden>
+        <span>本站阅读 <strong id="sidebarPv">—</strong> 次</span>
+        <span>访客 <strong id="sidebarUv">—</strong> 人</span>
+      </p>
     </aside>
     <div class="backdrop" id="backdrop" hidden></div>
 
@@ -95,5 +108,7 @@
 
   <script src="js/book-data.js"></script>
   <script src="js/app.js"></script>
+  <!-- 不蒜子：静态站浏览量统计，国内可访问，无需注册 -->
+  <script async src="https://busuanzi.ibruce.info/busuanzi/2.3/busuanzi.pure.mini.js"></script>
 </body>
 </html>

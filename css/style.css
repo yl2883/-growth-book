@@ -223,6 +223,44 @@ body.dark .btn.soft {
   transform: translateY(0);
 }
 
+.visit-stats {
+  margin: 1.15rem 0 0;
+  font-family: var(--sans);
+  font-size: 0.75rem;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  opacity: 0.9;
+}
+
+.visit-dot {
+  margin: 0 0.35rem;
+  opacity: 0.55;
+}
+
+.sidebar-stats {
+  position: sticky;
+  bottom: 0;
+  margin: auto 0 0;
+  padding: 0.85rem 0.35rem 0.2rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  font-family: var(--sans);
+  font-size: 0.72rem;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: linear-gradient(180deg, transparent, var(--panel) 28%);
+}
+
+.sidebar-stats strong {
+  font-weight: 600;
+  color: #5F734E;
+}
+
+body.dark .sidebar-stats strong {
+  color: var(--leaf);
+}
+
 .resume {
   margin: 1.2rem 0 0;
   font-family: var(--sans);

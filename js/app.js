@@ -315,6 +315,30 @@
     }
   });
 
+  /* ---------- visit stats (不蒜子) ---------- */
+  function syncVisitStats() {
+    const pv = document.getElementById("busuanzi_value_site_pv");
+    const uv = document.getElementById("busuanzi_value_site_uv");
+    const coverStats = document.getElementById("visitStats");
+    const sideStats = document.getElementById("sidebarStats");
+    const sidePv = document.getElementById("sidebarPv");
+    const sideUv = document.getElementById("sidebarUv");
+    const pvText = pv?.textContent?.trim();
+    const uvText = uv?.textContent?.trim();
+    if (!pvText && !uvText) return false;
+    if (coverStats) coverStats.hidden = false;
+    if (sideStats) sideStats.hidden = false;
+    if (sidePv && pvText) sidePv.textContent = pvText;
+    if (sideUv && uvText) sideUv.textContent = uvText;
+    return true;
+  }
+
+  let statsTries = 0;
+  const statsTimer = setInterval(() => {
+    statsTries += 1;
+    if (syncVisitStats() || statsTries > 40) clearInterval(statsTimer);
+  }, 400);
+
   /* ---------- boot ---------- */
   const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
   if (hash && pageIndex[hash] != null) {
