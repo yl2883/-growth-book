@@ -408,7 +408,7 @@ def main() -> None:
         "title": "借你十年成长文字的光",
         "titleLine1": "借你十年成长",
         "titleLine2": "文字的光",
-        "author": "天风 编著",
+        "author": "天风 著",
         "quote": "愿你历经岁月，依旧向阳生长。",
         "quoteLines": ["愿你历经岁月，", "依旧向阳生长。"],
         "cover": "images/cover.jpg",

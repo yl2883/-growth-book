@@ -315,27 +315,77 @@
     }
   });
 
-  /* ---------- visit stats (不蒜子) ---------- */
-  function syncVisitStats() {
-    const pv = document.getElementById("busuanzi_value_site_pv");
-    const uv = document.getElementById("busuanzi_value_site_uv");
+  /* ---------- visit stats ---------- */
+  const COUNTER_NS = "growthbookyl2883";
+
+  function setVisitNumbers(pv, uv) {
+    const pvEl = document.getElementById("busuanzi_value_site_pv");
+    const uvEl = document.getElementById("busuanzi_value_site_uv");
     const sideStats = document.getElementById("sidebarStats");
     const sidePv = document.getElementById("sidebarPv");
     const sideUv = document.getElementById("sidebarUv");
-    const pvText = pv?.textContent?.trim();
-    const uvText = uv?.textContent?.trim();
-    const ready = Boolean(pvText && pvText !== "…" && uvText && uvText !== "…");
-    if (!ready) return false;
+    if (pvEl && pv != null) pvEl.textContent = String(pv);
+    if (uvEl && uv != null) uvEl.textContent = String(uv);
     if (sideStats) sideStats.hidden = false;
-    if (sidePv) sidePv.textContent = pvText;
-    if (sideUv) sideUv.textContent = uvText;
+    if (sidePv && pv != null) sidePv.textContent = String(pv);
+    if (sideUv && uv != null) sideUv.textContent = String(uv);
+  }
+
+  function syncVisitStats() {
+    const pv = document.getElementById("busuanzi_value_site_pv")?.textContent?.trim();
+    const uv = document.getElementById("busuanzi_value_site_uv")?.textContent?.trim();
+    const ready = Boolean(pv && uv && pv !== "…" && uv !== "…" && /^\d+$/.test(pv) && /^\d+$/.test(uv));
+    if (!ready) return false;
+    setVisitNumbers(pv, uv);
     return true;
+  }
+
+  async function fallbackCounter() {
+    // counterapi.dev：Vercount 失败时的备用统计
+    try {
+      const pvRes = await fetch(`https://api.counterapi.dev/v1/${COUNTER_NS}/site_pv/up`, {
+        cache: "no-store",
+      });
+      if (!pvRes.ok) throw new Error("pv failed");
+      const pvData = await pvRes.json();
+      const pv = pvData.count ?? pvData.value;
+
+      const uvKey = "growth-book-uv-counted";
+      let uv;
+      if (!localStorage.getItem(uvKey)) {
+        const uvRes = await fetch(`https://api.counterapi.dev/v1/${COUNTER_NS}/site_uv/up`, {
+          cache: "no-store",
+        });
+        const uvData = await uvRes.json();
+        uv = uvData.count ?? uvData.value;
+        localStorage.setItem(uvKey, "1");
+      } else {
+        const uvRes = await fetch(`https://api.counterapi.dev/v1/${COUNTER_NS}/site_uv/`, {
+          cache: "no-store",
+        });
+        const uvData = await uvRes.json();
+        uv = uvData.count ?? uvData.value;
+      }
+      setVisitNumbers(pv, uv);
+      return true;
+    } catch (err) {
+      console.warn("visit counter fallback failed", err);
+      setVisitNumbers("—", "—");
+      return false;
+    }
   }
 
   let statsTries = 0;
   const statsTimer = setInterval(() => {
     statsTries += 1;
-    if (syncVisitStats() || statsTries > 50) clearInterval(statsTimer);
+    if (syncVisitStats()) {
+      clearInterval(statsTimer);
+      return;
+    }
+    if (statsTries >= 20) {
+      clearInterval(statsTimer);
+      fallbackCounter();
+    }
   }, 300);
 
   /* ---------- boot ---------- */
