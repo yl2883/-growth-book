@@ -319,25 +319,24 @@
   function syncVisitStats() {
     const pv = document.getElementById("busuanzi_value_site_pv");
     const uv = document.getElementById("busuanzi_value_site_uv");
-    const coverStats = document.getElementById("visitStats");
     const sideStats = document.getElementById("sidebarStats");
     const sidePv = document.getElementById("sidebarPv");
     const sideUv = document.getElementById("sidebarUv");
     const pvText = pv?.textContent?.trim();
     const uvText = uv?.textContent?.trim();
-    if (!pvText && !uvText) return false;
-    if (coverStats) coverStats.hidden = false;
+    const ready = Boolean(pvText && pvText !== "…" && uvText && uvText !== "…");
+    if (!ready) return false;
     if (sideStats) sideStats.hidden = false;
-    if (sidePv && pvText) sidePv.textContent = pvText;
-    if (sideUv && uvText) sideUv.textContent = uvText;
+    if (sidePv) sidePv.textContent = pvText;
+    if (sideUv) sideUv.textContent = uvText;
     return true;
   }
 
   let statsTries = 0;
   const statsTimer = setInterval(() => {
     statsTries += 1;
-    if (syncVisitStats() || statsTries > 40) clearInterval(statsTimer);
-  }, 400);
+    if (syncVisitStats() || statsTries > 50) clearInterval(statsTimer);
+  }, 300);
 
   /* ---------- boot ---------- */
   const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
