@@ -317,6 +317,7 @@
 
   /* ---------- visit stats ---------- */
   const COUNTER_NS = "growthbookyl2883";
+  const UV_KEY = "growth-book-uv-counted";
 
   function setVisitNumbers(pv, uv) {
     const pvEl = document.getElementById("busuanzi_value_site_pv");
@@ -331,62 +332,71 @@
     if (sideUv && uv != null) sideUv.textContent = String(uv);
   }
 
-  function syncVisitStats() {
-    const pv = document.getElementById("busuanzi_value_site_pv")?.textContent?.trim();
-    const uv = document.getElementById("busuanzi_value_site_uv")?.textContent?.trim();
-    const ready = Boolean(pv && uv && pv !== "…" && uv !== "…" && /^\d+$/.test(pv) && /^\d+$/.test(uv));
-    if (!ready) return false;
-    setVisitNumbers(pv, uv);
-    return true;
+  async function countWithVercount() {
+    const isNewUv = !localStorage.getItem(UV_KEY);
+    const res = await fetch("https://events.vercount.one/api/v2/log", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ url: location.href, isNewUv }),
+      cache: "no-store",
+    });
+    if (!res.ok) throw new Error("vercount http " + res.status);
+    const data = await res.json();
+    const pv = data?.data?.site_pv ?? data?.site_pv;
+    const uv = data?.data?.site_uv ?? data?.site_uv;
+    if (pv == null || uv == null) throw new Error("vercount empty");
+    if (isNewUv) localStorage.setItem(UV_KEY, "1");
+    return { pv, uv };
   }
 
-  async function fallbackCounter() {
-    // counterapi.dev：Vercount 失败时的备用统计
-    try {
-      const pvRes = await fetch(`https://api.counterapi.dev/v1/${COUNTER_NS}/site_pv/up`, {
+  async function countWithCounterApi() {
+    const pvRes = await fetch(`https://api.counterapi.dev/v1/${COUNTER_NS}/site_pv/up`, {
+      cache: "no-store",
+    });
+    if (!pvRes.ok) throw new Error("counterapi pv failed");
+    const pvData = await pvRes.json();
+    const pv = pvData.count ?? pvData.value;
+
+    let uv;
+    if (!localStorage.getItem(UV_KEY)) {
+      const uvRes = await fetch(`https://api.counterapi.dev/v1/${COUNTER_NS}/site_uv/up`, {
         cache: "no-store",
       });
-      if (!pvRes.ok) throw new Error("pv failed");
-      const pvData = await pvRes.json();
-      const pv = pvData.count ?? pvData.value;
+      const uvData = await uvRes.json();
+      uv = uvData.count ?? uvData.value;
+      localStorage.setItem(UV_KEY, "1");
+    } else {
+      const uvRes = await fetch(`https://api.counterapi.dev/v1/${COUNTER_NS}/site_uv/`, {
+        cache: "no-store",
+      });
+      const uvData = await uvRes.json();
+      uv = uvData.count ?? uvData.value;
+    }
+    return { pv, uv };
+  }
 
-      const uvKey = "growth-book-uv-counted";
-      let uv;
-      if (!localStorage.getItem(uvKey)) {
-        const uvRes = await fetch(`https://api.counterapi.dev/v1/${COUNTER_NS}/site_uv/up`, {
-          cache: "no-store",
-        });
-        const uvData = await uvRes.json();
-        uv = uvData.count ?? uvData.value;
-        localStorage.setItem(uvKey, "1");
-      } else {
-        const uvRes = await fetch(`https://api.counterapi.dev/v1/${COUNTER_NS}/site_uv/`, {
-          cache: "no-store",
-        });
-        const uvData = await uvRes.json();
-        uv = uvData.count ?? uvData.value;
+  async function loadVisitStats() {
+    // 只在线上域名统计，避免本地预览干扰
+    const host = location.hostname;
+    if (host === "localhost" || host === "127.0.0.1") {
+      setVisitNumbers("本地", "本地");
+      return;
+    }
+    try {
+      let result;
+      try {
+        result = await countWithVercount();
+      } catch (e1) {
+        result = await countWithCounterApi();
       }
-      setVisitNumbers(pv, uv);
-      return true;
+      setVisitNumbers(result.pv, result.uv);
     } catch (err) {
-      console.warn("visit counter fallback failed", err);
+      console.warn("visit stats failed", err);
       setVisitNumbers("—", "—");
-      return false;
     }
   }
 
-  let statsTries = 0;
-  const statsTimer = setInterval(() => {
-    statsTries += 1;
-    if (syncVisitStats()) {
-      clearInterval(statsTimer);
-      return;
-    }
-    if (statsTries >= 20) {
-      clearInterval(statsTimer);
-      fallbackCounter();
-    }
-  }, 300);
+  loadVisitStats();
 
   /* ---------- boot ---------- */
   const hash = decodeURIComponent(location.hash.replace(/^#/, ""));
