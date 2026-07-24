@@ -12,12 +12,20 @@ from pathlib import Path
 from docx import Document
 
 ROOT = Path(__file__).resolve().parents[1]
-DOCX = Path(
-    "/Users/a57321/Library/Containers/com.tencent.xinWeChat/Data/Documents/"
-    "xwechat_files/wxid_oomc1gzm72rv22_1341/msg/file/2026-02/"
-    "借你十年成长文字的光2026.01(正).docx"
-)
+DOCX_CANDIDATES = [
+    ROOT / "source" / "借你十年成长文字的光.docx",
+    Path("/Users/a57321/Downloads/借你十年成长文字的光2026.01(正).docx"),
+]
 OUT = ROOT / "js" / "book-data.js"
+
+SIGNATURES = {"天风", "蔡春华", "程光泉", "箫箫"}
+
+
+def resolve_docx() -> Path:
+    for path in DOCX_CANDIDATES:
+        if path.exists():
+            return path
+    raise FileNotFoundError("Word manuscript not found")
 
 
 def soft(s: str) -> str:
@@ -42,6 +50,10 @@ def is_date(s: str) -> bool:
     return bool(re.match(r"^(19|20)\d{2}年", s))
 
 
+def is_signature(s: str) -> bool:
+    return s in SIGNATURES
+
+
 def slugify(text: str, used: set[str]) -> str:
     base = re.sub(r"[^\w\u4e00-\u9fff]+", "-", text).strip("-") or "sec"
     out = base
@@ -53,6 +65,15 @@ def slugify(text: str, used: set[str]) -> str:
     return out
 
 
+def clean_toc_line(t: str) -> str:
+    t = t.strip()
+    if not t or t.startswith("特别说明"):
+        return ""
+    t = re.sub(r"/\d+\s*$", "", t).strip()
+    t = re.sub(r"(?<=[\u4e00-\u9fff》」』])\d+\s*$", "", t).strip()
+    return t
+
+
 TITLE_ALIASES = {
     soft("花开的声音"): [soft("倾听花开的声音"), soft("花开的声音")],
     soft("我迷恋家乡的树"): [soft("我迷恋家乡的榕树"), soft("4.我迷恋家乡的榕树")],
@@ -62,21 +83,18 @@ TITLE_ALIASES = {
         soft("治愈你的是那个未曾涉足的广阔世界"),
         soft("1.治愈你的是那个未曾涉足的广阔世界"),
     ],
-    soft("（后记）文字之舟：载我们渡过教育的河流"): [
-        soft("文字之舟：载我们渡过教育的河流"),
-        soft("（后记）文字之舟：载我们渡过教育的河流"),
-    ],
     soft("忽略的,往往是最重要的"): [soft("忽略的，往往是最重要的")],
     soft("二、友谊万岁"): [soft("二、 友谊万岁"), soft("二、友谊万岁")],
     soft("一个时光倒流的梦"): [soft("1. 一个时光倒流的梦"), soft("1.一个时光倒流的梦")],
     soft("一、把阳光带回家"): [soft("吾爱吾家"), soft("把阳光带回家")],
-    soft("第一次观光之舞"): [soft("光之舞"), soft("6.光之舞")],
+    soft("观光之舞"): [soft("光之舞"), soft("6.光之舞"), soft("第一次观光之舞")],
+    soft("第一次观光之舞"): [soft("光之舞"), soft("6.光之舞"), soft("观光之舞")],
     soft("思考多么重要"): [soft("思考,多么重要"), soft("5.思考,多么重要")],
+    soft("后记"): [soft("后记")],
 }
 
 
 def split_dash_title(title: str) -> tuple[str, str | None]:
-    """Split '主标题——副标题' forms that appear on one TOC line."""
     for sep in ("——", "—", "--", "–"):
         if sep in title:
             left, right = title.split(sep, 1)
@@ -97,26 +115,19 @@ def title_keys(title: str) -> list[str]:
         re.sub(r"\s+", " ", title),
         re.sub(r"\s+", "", title),
         re.sub(r"\s+", "", main),
-        # collapse multiple dashes for Part 1 titles
         re.sub(r"[-—–]+", "-", title),
         re.sub(r"[-—–]+", "-", main),
     ]
     for candidate in candidates:
         k = soft(candidate)
-        # also soft after dash collapse
         k2 = soft(re.sub(r"[-—–]+", "-", candidate))
         for item in (k, k2):
             if item and item not in keys:
                 keys.append(item)
-    for alias in TITLE_ALIASES.get(soft(title), []):
-        if alias not in keys:
-            keys.append(alias)
-    for alias in TITLE_ALIASES.get(soft(strip_num(title)), []):
-        if alias not in keys:
-            keys.append(alias)
-    for alias in TITLE_ALIASES.get(soft(strip_num(main)), []):
-        if alias not in keys:
-            keys.append(alias)
+    for alias_key in (soft(title), soft(strip_num(title)), soft(strip_num(main))):
+        for alias in TITLE_ALIASES.get(alias_key, []):
+            if alias not in keys:
+                keys.append(alias)
     return keys
 
 
@@ -126,19 +137,16 @@ def paras_match(body: str, title: str) -> bool:
     for key in title_keys(title):
         if body_s == key or body_plain == key:
             return True
-        # 【拾遗】... trailing note
         if key.startswith(soft("【拾遗】")) and body_s.startswith(soft("【拾遗】")):
             return True
         if key == soft("【拾遗】") and body_s.startswith(soft("【拾遗】")):
             return True
         if key == soft("【妈妈有话说】") and body_s.startswith(soft("【妈妈有话说】")):
             return True
-        # body title may be longer with note
         if body_plain.startswith(key) and len(key) >= 4:
             return True
         if key.startswith(body_plain) and len(body_plain) >= 4 and len(body_plain) >= len(key) * 0.7:
             return True
-    # special: section without numbering
     if re.match(r"^[一二三四五六七八九十]+[、．.]", title):
         if soft(body) == soft(strip_num(title)):
             return True
@@ -148,7 +156,7 @@ def paras_match(body: str, title: str) -> bool:
 def classify_toc(t: str) -> str:
     if re.match(r"^第[一二三四]辑", t):
         return "part"
-    if t.startswith("（后记）") or t.startswith("(后记)"):
+    if t == "后记" or t.startswith("（后记）") or t.startswith("(后记)"):
         return "epilogue"
     if t in ("【妈妈有话说】", "【拾遗】"):
         return "group"
@@ -159,17 +167,141 @@ def classify_toc(t: str) -> str:
     return "article"
 
 
+def blocks_to_html(blocks: list[tuple[str, str]], title: str, subtitle: str | None = None) -> str:
+    parts = [f'<h1 class="chapter-title">{html.escape(title)}</h1>']
+    if subtitle:
+        parts.append(f'<p class="subtitle">{html.escape(subtitle)}</p>')
+    for kind, t in blocks:
+        esc = html.escape(t).replace("\n", "<br>")
+        if kind == "p":
+            parts.append(f"<p>{esc}</p>")
+        elif kind in ("date", "signature"):
+            parts.append(f'<p class="date">{esc}</p>')
+        elif kind == "subtitle":
+            parts.append(f'<p class="subtitle">{esc}</p>')
+        elif kind == "label":
+            parts.append(f'<p class="label">{esc}</p>')
+        elif kind == "subhead":
+            parts.append(f'<h3 class="subhead">{esc}</h3>')
+        elif kind == "note":
+            parts.append(f'<p class="note">{esc}</p>')
+        else:
+            parts.append(f"<p>{esc}</p>")
+    return "\n".join(parts)
+
+
+def classify_block(t: str, node: dict | None = None) -> tuple[str, str]:
+    if node and node.get("subtitle") and (t == node["subtitle"] or t.startswith("——")):
+        return "subtitle", t
+    if is_date(t):
+        return "date", t
+    if is_signature(t):
+        return "signature", t
+    if re.match(r"^【.+】$", t):
+        return "label", t
+    if re.match(r"^（[一二三四五六七八九十\d]+）", t) or re.match(r"^\([一二三四五六七八九十\d]+\)", t):
+        return "subhead", t
+    if (
+        node
+        and re.match(r"^[一二三四五六七八九十]+[、．.]", t)
+        and len(t) < 60
+        and node["kind"] in ("article", "epilogue", "group", "preface")
+    ):
+        return "subhead", t
+    return "p", t
+
+
+def extract_front_pages(paras: list[str], toc_i: int) -> list[dict]:
+    """Extract 自序 / 序一 / 序二 / 序三 from the front matter before TOC."""
+    labels = {
+        "自序": {
+            "id": "preface",
+            "title": "自序——传递明朗与欢乐",
+            "fallback_subtitle": "传递明朗与欢乐",
+        },
+        "序一": {
+            "id": "preface-1",
+            "title": "序一——看见光 成为光",
+            "fallback_subtitle": "看见光 成为光",
+        },
+        "序二": {
+            "id": "preface-2",
+            "title": "序二——让教育真正成为一种从容的艺术",
+            "fallback_subtitle": "让教育真正成为一种从容的艺术",
+        },
+        "序三": {
+            "id": "preface-3",
+            "title": "序三——拥抱过去",
+            "fallback_subtitle": "拥抱过去",
+        },
+    }
+    markers = [(i, t) for i, t in enumerate(paras[:toc_i]) if t in labels]
+    pages = []
+    for idx, (start, label) in enumerate(markers):
+        meta = labels[label]
+        end = markers[idx + 1][0] if idx + 1 < len(markers) else toc_i
+        blocks: list[tuple[str, str]] = []
+        subtitle = None
+        title = meta["title"]
+        # Gather content after the label line
+        nonempty = [(i, paras[i]) for i in range(start + 1, end) if paras[i]]
+        if nonempty:
+            # First short line is usually the essay title
+            first_i, first_t = nonempty[0]
+            if len(first_t) < 40 and not first_t.startswith("——"):
+                title = f"{label}——{first_t}"
+                nonempty = nonempty[1:]
+            elif first_t == meta["fallback_subtitle"]:
+                title = f"{label}——{first_t}"
+                nonempty = nonempty[1:]
+        if nonempty and (nonempty[0][1].startswith("——") or nonempty[0][1].startswith("—")):
+            subtitle = nonempty[0][1]
+            nonempty = nonempty[1:]
+        for _, t in nonempty:
+            blocks.append(classify_block(t, {"kind": "preface", "subtitle": subtitle}))
+        pages.append(
+            {
+                "id": meta["id"],
+                "title": title,
+                "part": "卷首",
+                "section": "",
+                "group": "",
+                "kind": "preface",
+                "html": blocks_to_html(blocks, title, subtitle),
+            }
+        )
+    return pages
+
+
 def main() -> None:
-    doc = Document(str(DOCX))
+    docx_path = resolve_docx()
+    print("using", docx_path)
+    doc = Document(str(docx_path))
     paras = [p.text.replace("\u00a0", " ").strip() for p in doc.paragraphs]
 
     toc_i = next(i for i, t in enumerate(paras) if t == "目录")
     ji = [i for i, t in enumerate(paras) if re.match(r"^第[一二三四]辑", t)]
+    if len(ji) < 5:
+        raise RuntimeError("cannot locate body start (第二轮 第一辑)")
     body_start = ji[4]
-    preface_start = next(i for i, t in enumerate(paras) if t.startswith("自序"))
 
-    # ---- TOC nodes ----
-    toc_lines = [t for t in paras[toc_i + 1 : body_start] if t]
+    front_pages = extract_front_pages(paras, toc_i)
+    if len(front_pages) < 4:
+        print("warning: expected 4 front pages, got", len(front_pages), [p["title"] for p in front_pages])
+
+    # ---- TOC nodes (body only; skip 自序/序一... listed in TOC) ----
+    toc_lines = []
+    seen_first_part = False
+    for raw in paras[toc_i + 1 : body_start]:
+        t = clean_toc_line(raw)
+        if not t:
+            continue
+        if re.match(r"^第[一二三四]辑", t):
+            seen_first_part = True
+        if not seen_first_part:
+            continue
+        toc_lines.append(t)
+
     nodes = []
     used_ids: set[str] = set()
     current_part = None
@@ -200,11 +332,10 @@ def main() -> None:
             current_part = "后记"
             current_section = None
             current_group = None
-            title = t
+            title = "后记"
         else:
             title = t
 
-        # TOC sometimes keeps "标题——副标题" on one line
         inline_sub = None
         if kind == "article":
             main, inline_sub = split_dash_title(title)
@@ -219,6 +350,8 @@ def main() -> None:
             "section": current_section,
             "group": current_group if kind == "article" else (t if kind == "group" else None),
         }
+        if kind == "epilogue":
+            node["display"] = "后记"
         if inline_sub:
             node["subtitle"] = inline_sub
         if kind == "article" and i + 1 < len(toc_lines) and classify_toc(toc_lines[i + 1]) == "subtitle":
@@ -228,7 +361,6 @@ def main() -> None:
         i += 1
 
     # ---- Linear match body ----
-    # Expected matchable nodes in order (all except we still match parts/sections/groups)
     expect = list(nodes)
     starts: list[int | None] = [None] * len(expect)
     ei = 0
@@ -237,8 +369,6 @@ def main() -> None:
             continue
         if ei >= len(expect):
             break
-        # Try current expected; also allow skipping a failed optional? No - try current only,
-        # but if current fails for long, try look-ahead of 1-2 for stuck groups/aliases
         matched = False
         for look in range(0, 6):
             if ei + look >= len(expect):
@@ -256,10 +386,9 @@ def main() -> None:
 
     unmatched = [expect[i]["title"] for i in range(len(expect)) if starts[i] is None]
     print(f"nodes={len(expect)} unmatched={len(unmatched)}")
-    for t in unmatched[:30]:
+    for t in unmatched[:40]:
         print("  unmatched:", t)
 
-    # Fill content ranges
     def next_start(idx: int) -> int:
         for j in range(idx + 1, len(starts)):
             if starts[j] is not None:
@@ -283,81 +412,23 @@ def main() -> None:
                     continue
                 if node["kind"] == "section" and soft(t) == soft(strip_num(node["title"])):
                     continue
-            if node.get("subtitle") and (t == node["subtitle"] or t.startswith("——")):
-                blocks.append(("subtitle", t))
-            elif is_date(t):
-                blocks.append(("date", t))
-            elif re.match(r"^【.+】$", t):
-                blocks.append(("label", t))
-            elif re.match(r"^（[一二三四五六七八九十\d]+）", t) or re.match(
-                r"^\([一二三四五六七八九十\d]+\)", t
-            ):
-                blocks.append(("subhead", t))
-            elif (
-                re.match(r"^[一二三四五六七八九十]+[、．.]", t)
-                and len(t) < 60
-                and node["kind"] in ("article", "epilogue", "group")
-            ):
-                blocks.append(("subhead", t))
-            else:
-                blocks.append(("p", t))
+                if node["kind"] == "epilogue" and soft(t) == soft("后记"):
+                    continue
+            blocks.append(classify_block(t, node))
         return blocks
 
-    def blocks_to_html(blocks: list[tuple[str, str]], title: str, subtitle: str | None = None) -> str:
-        parts = [f'<h1 class="chapter-title">{html.escape(title)}</h1>']
-        if subtitle:
-            parts.append(f'<p class="subtitle">{html.escape(subtitle)}</p>')
-        for kind, t in blocks:
-            esc = html.escape(t).replace("\n", "<br>")
-            if kind == "p":
-                parts.append(f"<p>{esc}</p>")
-            elif kind == "date":
-                parts.append(f'<p class="date">{esc}</p>')
-            elif kind == "subtitle":
-                parts.append(f'<p class="subtitle">{esc}</p>')
-            elif kind == "label":
-                parts.append(f'<p class="label">{esc}</p>')
-            elif kind == "subhead":
-                parts.append(f'<h3 class="subhead">{esc}</h3>')
-            elif kind == "note":
-                parts.append(f'<p class="note">{esc}</p>')
-            else:
-                parts.append(f"<p>{esc}</p>")
-        return "\n".join(parts)
+    pages = list(front_pages)
 
-    # Preface
-    pref_blocks: list[tuple[str, str]] = []
-    for t in paras[preface_start + 1 : toc_i]:
-        if not t:
-            continue
-        pref_blocks.append(("date", t) if is_date(t) else ("p", t))
-
-    pages = [
-        {
-            "id": "preface",
-            "title": "自序——传递明朗与欢乐",
-            "part": "卷首",
-            "section": "",
-            "group": "",
-            "kind": "preface",
-            "html": blocks_to_html(pref_blocks, "自序——传递明朗与欢乐"),
-        }
-    ]
-
-    # Build pages for articles + epilogue; parts/sections/groups are TOC only
-    # Also create pages for section/group only if they have unique intro content? Skip.
     page_id_by_node: dict[int, str] = {}
     for idx, node in enumerate(nodes):
         if node["kind"] not in ("article", "epilogue"):
             continue
         start = starts[idx]
         if start is None:
-            # still create empty stub? skip empty
             print("skip missing article:", node["title"])
             continue
         end = next_start(idx)
         blocks = to_blocks(start, end, node)
-        # Avoid including following structural titles mistakenly - already bounded by next_start
         page = {
             "id": node["id"],
             "title": node["display"],
@@ -371,7 +442,18 @@ def main() -> None:
         page_id_by_node[idx] = node["id"]
 
     # TOC for UI
-    toc = [{"id": "preface", "title": "自序——传递明朗与欢乐", "level": 1, "kind": "preface", "pageId": "preface"}]
+    toc = []
+    for p in front_pages:
+        toc.append(
+            {
+                "id": p["id"],
+                "title": p["title"],
+                "level": 1,
+                "kind": "preface",
+                "pageId": p["id"],
+            }
+        )
+
     for idx, node in enumerate(nodes):
         if node["kind"] == "part":
             level, kind = 1, "part"
@@ -386,7 +468,6 @@ def main() -> None:
 
         page_id = page_id_by_node.get(idx)
         if page_id is None:
-            # point to next available page
             for j in range(idx + 1, len(nodes)):
                 if j in page_id_by_node:
                     page_id = page_id_by_node[j]
@@ -397,7 +478,7 @@ def main() -> None:
         toc.append(
             {
                 "id": node["id"],
-                "title": node["display"] if node["kind"] == "article" else node["title"],
+                "title": node["display"] if node["kind"] in ("article", "epilogue") else node["title"],
                 "level": level,
                 "kind": kind,
                 "pageId": page_id,
@@ -422,8 +503,15 @@ def main() -> None:
     nonempty = sum(1 for p in pages if len(re.sub(r"<[^>]+>", "", p["html"])) > 40)
     print(f"pages={len(pages)} nonempty={nonempty} toc={len(toc)}")
     print("wrote", OUT, OUT.stat().st_size)
-    print("first pages:", [p["title"] for p in pages[:10]])
-    print("last pages:", [p["title"] for p in pages[-6:]])
+    print("front:", [p["title"] for p in pages if p["kind"] == "preface"])
+    print("first body:", [p["title"] for p in pages if p["kind"] != "preface"][:6])
+    print("last pages:", [p["title"] for p in pages[-4:]])
+    # Show epilogue excerpt
+    epi = next((p for p in pages if p["kind"] == "epilogue"), None)
+    if epi:
+        text = re.sub(r"<[^>]+>", "", epi["html"])
+        print("epilogue chars", len(text))
+        print("epilogue head:", text[:120].replace("\n", " "))
 
 
 if __name__ == "__main__":
